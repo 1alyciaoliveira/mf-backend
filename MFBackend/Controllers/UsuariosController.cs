@@ -5,189 +5,201 @@ using Microsoft.EntityFrameworkCore;
 using MFBackend.Models;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 
 
-namespace MFBackend.Controllers;
-
-public class UsuariosController : Controller
+namespace MFBackend.Controllers
 {
-    private readonly AppDbContext _context;
-
-    public UsuariosController(AppDbContext context)
+    [Authorize(Roles = "Admin")]
+    public class UsuariosController : Controller
     {
-        _context = context;
-    }
+        private readonly AppDbContext _context;
 
-    public async Task<IActionResult> Index()
-    {
-        return View(await _context.Usuarios.ToListAsync());
-    }
-
-    public IActionResult Login()
-    {
-        return View();
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> Login(Usuario usuario)
-    {
-        var dados = await _context.Usuarios.FindAsync(usuario.Id);
-
-        if(dados == null)
+        public UsuariosController(AppDbContext context)
         {
-            ViewBag.Message = "Usuário e/ou senha inválidos!";
+            _context = context;
         }
 
-        bool senhaOk = BCrypt.Net.BCrypt.Verify(usuario.Senha, dados.Senha);
-
-        if(senhaOk)
+        public async Task<IActionResult> Index()
         {
-            var claims = new List<Claim>
+            return View(await _context.Usuarios.ToListAsync());
+        }
+
+        [AllowAnonymous]
+        public IActionResult AccessDenied()
+        {
+            return View();
+        }
+
+        [AllowAnonymous]
+        public IActionResult Login()
+        {
+            return View();
+        }
+
+        [HttpPost]
+        [AllowAnonymous]
+        public async Task<IActionResult> Login(Usuario usuario)
+        {
+            var dados = await _context.Usuarios.FindAsync(usuario.Id);
+
+            if(dados == null)
             {
-                new Claim(ClaimTypes.Name, dados.Nome),
-                new Claim(ClaimTypes.NameIdentifier, dados.Id.ToString()),
-                new Claim(ClaimTypes.Role, dados.Perfil.ToString())
-            };
+                ViewBag.Message = "Usuário e/ou senha inválidos!";
+            }
 
-            var usuarioIdentity = new ClaimsIdentity(claims, "login");
-            ClaimsPrincipal principal = new ClaimsPrincipal(usuarioIdentity);
+            bool senhaOk = BCrypt.Net.BCrypt.Verify(usuario.Senha, dados.Senha);
 
-            var props = new AuthenticationProperties
+            if(senhaOk)
             {
-                AllowRefresh = true,
-                ExpiresUtc = DateTimeOffset.Now.AddHours(8),
-                IsPersistent = true,
-            };
+                var claims = new List<Claim>
+                {
+                    new Claim(ClaimTypes.Name, dados.Nome),
+                    new Claim(ClaimTypes.NameIdentifier, dados.Id.ToString()),
+                    new Claim(ClaimTypes.Role, dados.Perfil.ToString())
+                };
 
-            await HttpContext.SignInAsync(principal, props);
+                var usuarioIdentity = new ClaimsIdentity(claims, "login");
+                ClaimsPrincipal principal = new ClaimsPrincipal(usuarioIdentity);
 
-            return Redirect("/");
+                var props = new AuthenticationProperties
+                {
+                    AllowRefresh = true,
+                    ExpiresUtc = DateTimeOffset.Now.AddHours(8),
+                    IsPersistent = true,
+                };
+
+                await HttpContext.SignInAsync(principal, props);
+
+                return Redirect("/");
+            }
+            else
+            {
+                ViewBag.Message = "Usuário e/ou senha inválidos!";
+            }
+
+            return View();
         }
-        else
+
+        [AllowAnonymous]
+        public async Task<IActionResult> Logout()
         {
-            ViewBag.Message = "Usuário e/ou senha inválidos!";
+            await HttpContext.SignOutAsync();
+            return RedirectToAction("Login", "Usuarios");
         }
 
-        return View();
-    }
-
-    public async Task<IActionResult> Logout()
-    {
-        await HttpContext.SignOutAsync();
-        return RedirectToAction("Login", "Usuarios");
-    }
-
-    public IActionResult Create()
-    {
-        return View();
-    }
-
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Create([Bind("Id, Nome, Senha, Perfil")] Usuario usuario)
-    {
-        if (ModelState.IsValid)
+        public IActionResult Create()
         {
-            usuario.Senha = BCrypt.Net.BCrypt.HashPassword(usuario.Senha);
-            _context.Add(usuario);
-            await _context.SaveChangesAsync();
-            return RedirectToAction(nameof(Index));
+            return View();
         }
-        
-        return View(usuario);
-    }
 
-    public async Task<IActionResult> Edit(int? id)
-    {
-        if (id == null || _context.Usuarios == null)
-            return NotFound();
-        
-        var usuario = await _context.Usuarios.FindAsync(id);
-
-        if(usuario == null)
-            return NotFound();
-
-        return View(usuario);
-    }
-
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Edit(int id, [Bind("Id, Nome, Senha, Perfil")] Usuario usuario)
-    {
-        if(id != usuario.Id)
-            return NotFound();
-        
-        if (ModelState.IsValid)
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Create([Bind("Id, Nome, Senha, Perfil")] Usuario usuario)
         {
-            try
+            if (ModelState.IsValid)
             {
                 usuario.Senha = BCrypt.Net.BCrypt.HashPassword(usuario.Senha);
-                _context.Update(usuario);
+                _context.Add(usuario);
                 await _context.SaveChangesAsync();
+                return RedirectToAction(nameof(Index));
             }
-            catch (DbUpdateConcurrencyException)
+            
+            return View(usuario);
+        }
+
+        public async Task<IActionResult> Edit(int? id)
+        {
+            if (id == null || _context.Usuarios == null)
+                return NotFound();
+            
+            var usuario = await _context.Usuarios.FindAsync(id);
+
+            if(usuario == null)
+                return NotFound();
+
+            return View(usuario);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Edit(int id, [Bind("Id, Nome, Senha, Perfil")] Usuario usuario)
+        {
+            if(id != usuario.Id)
+                return NotFound();
+            
+            if (ModelState.IsValid)
             {
-                if (!UsuarioExists(usuario.Id))
+                try
                 {
-                    return NotFound();
+                    usuario.Senha = BCrypt.Net.BCrypt.HashPassword(usuario.Senha);
+                    _context.Update(usuario);
+                    await _context.SaveChangesAsync();
                 }
-                else
+                catch (DbUpdateConcurrencyException)
                 {
-                    throw;
+                    if (!UsuarioExists(usuario.Id))
+                    {
+                        return NotFound();
+                    }
+                    else
+                    {
+                        throw;
+                    }
                 }
+                return RedirectToAction(nameof(Index));
             }
+            return View();
+        }
+
+        public async Task<IActionResult> Details(int? id)
+        {
+            if(id == null || _context.Usuarios == null)
+                return NotFound();
+            
+            var usuario = await _context.Usuarios.FirstOrDefaultAsync(m => m.Id == id);
+
+            if(usuario == null)
+                return NotFound();
+
+            return View(usuario);
+        }
+
+            public async Task<IActionResult> Delete(int? id)
+        {
+            if(id == null || _context.Usuarios == null)
+                return NotFound();
+            
+            var usuario = await _context.Usuarios.FirstOrDefaultAsync(m => m.Id == id);
+
+            if(usuario == null)
+                return NotFound();
+
+            return View(usuario);
+        }
+
+        [HttpPost, ActionName("Delete")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> DeleteConfirmed(int? id)
+        {
+            if(_context.Usuarios == null)
+                return Problem("Ocorreu um erro ao tentar excluir o registro!");
+            
+            var usuario = await _context.Usuarios.FindAsync(id);
+
+            if(usuario != null)
+                _context.Usuarios.Remove(usuario);
+            
+            await _context.SaveChangesAsync();
+
             return RedirectToAction(nameof(Index));
         }
-        return View();
-    }
 
-    public async Task<IActionResult> Details(int? id)
-    {
-        if(id == null || _context.Usuarios == null)
-            return NotFound();
+        private bool UsuarioExists(int id)
+        {
+            return _context.Usuarios.Any(e => e.Id == id);
+        }
+
         
-        var usuario = await _context.Usuarios.FirstOrDefaultAsync(m => m.Id == id);
-
-        if(usuario == null)
-            return NotFound();
-
-        return View(usuario);
     }
-
-        public async Task<IActionResult> Delete(int? id)
-    {
-        if(id == null || _context.Usuarios == null)
-            return NotFound();
-        
-        var usuario = await _context.Usuarios.FirstOrDefaultAsync(m => m.Id == id);
-
-        if(usuario == null)
-            return NotFound();
-
-        return View(usuario);
-    }
-
-    [HttpPost, ActionName("Delete")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> DeleteConfirmed(int? id)
-    {
-        if(_context.Usuarios == null)
-            return Problem("Ocorreu um erro ao tentar excluir o registro!");
-        
-        var usuario = await _context.Usuarios.FindAsync(id);
-
-        if(usuario != null)
-            _context.Usuarios.Remove(usuario);
-        
-        await _context.SaveChangesAsync();
-
-        return RedirectToAction(nameof(Index));
-    }
-
-    private bool UsuarioExists(int id)
-    {
-        return _context.Usuarios.Any(e => e.Id == id);
-    }
-
-    
 }
