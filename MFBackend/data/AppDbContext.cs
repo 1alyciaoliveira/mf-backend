@@ -10,6 +10,7 @@ namespace MFBackend.Data
 
         public DbSet<Veiculos> Veiculos { get; set; }
         public DbSet<Consumo> Consumos { get; set; }
+        public DbSet<Usuario> Usuarios { get; set; }
     }
 
 }
