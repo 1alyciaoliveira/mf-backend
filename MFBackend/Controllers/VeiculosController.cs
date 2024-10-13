@@ -1,8 +1,8 @@
 using System.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
-using MFBackend.Models;
 using MFBackend.Data;
 using Microsoft.EntityFrameworkCore;
+using MFBackend.Models;
 
 namespace MFBackend.Controllers;
 
@@ -21,4 +21,19 @@ public class VeiculosController : Controller
         return View(dados);
     }
 
+    public IActionResult Create()
+    {
+        return View();
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> Create(Veiculos veiculo)
+    {
+        if (ModelState.IsValid)
+        {
+            _context.Veiculos.Add(veiculo);
+            await _context.SaveChangesAsync();
+        }
+        return View(veiculo);
+    }
 }
